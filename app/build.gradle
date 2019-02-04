@@ -25,6 +25,7 @@ android {
         multiDexEnabled true
         vectorDrawables.useSupportLibrary = true
         buildConfigField "String", "CONNECTION_URL", "\"wss://natrium.banano.cc:4443\""
+        //buildConfigField "String", "CONNECTION_URL", "\"wss://light.nano.org:443\""
     }
     buildTypes {
         debug {
@@ -75,9 +76,6 @@ dependencies {
     final ZXING_VERSION = '1.9'
     final LIFECYCLE_VERSION = '2.0.0'
     implementation 'androidx.multidex:multidex:2.0.0'
-
-    //LifeCycle
-    implementation "androidx.lifecycle:lifecycle-extensions:$LIFECYCLE_VERSION"
 
     // Support
     implementation "androidx.appcompat:appcompat:$APPCOMPAT_VERSION"

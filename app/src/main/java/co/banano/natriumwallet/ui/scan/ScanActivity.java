@@ -12,6 +12,7 @@ import co.banano.natriumwallet.R;
 import co.banano.natriumwallet.model.Address;
 import com.google.zxing.Result;
 
+import manta.MantaWallet;
 import me.dm7.barcodescanner.core.IViewFinder;
 import me.dm7.barcodescanner.zxing.ZXingScannerView;
 
@@ -86,8 +87,10 @@ public class ScanActivity extends BaseScannerActivity implements ZXingScannerVie
     @Override
     public void handleResult(Result rawResult) {
         if (!seedMode) {
+
             String address = Address.findAddress(rawResult.getText());
-            if (address != null && !address.isEmpty()) {
+            if ((address != null && !address.isEmpty()) ||
+                    (! MantaWallet.Companion.parseURL(rawResult.getText()).isEmpty())) {
                 Bundle conData = new Bundle();
                 conData.putString(QR_CODE_RESULT, rawResult.getText());
                 Intent intent = new Intent();

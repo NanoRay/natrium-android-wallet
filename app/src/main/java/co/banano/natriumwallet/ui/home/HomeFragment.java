@@ -7,6 +7,7 @@ import androidx.databinding.DataBindingUtil;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
@@ -14,6 +15,7 @@ import androidx.fragment.app.FragmentTransaction;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.customview.widget.ViewDragHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
+
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -48,9 +50,12 @@ import co.banano.natriumwallet.ui.common.UIUtil;
 import co.banano.natriumwallet.ui.common.WindowControl;
 import co.banano.natriumwallet.ui.contact.ContactOverviewFragment;
 import co.banano.natriumwallet.ui.receive.ReceiveDialogFragment;
+import co.banano.natriumwallet.ui.send.SendCompleteDialogFragment;
+import co.banano.natriumwallet.ui.send.SendConfirmMantaDialogFragment;
 import co.banano.natriumwallet.ui.send.SendDialogFragment;
 import co.banano.natriumwallet.ui.settings.SettingsFragment;
 import co.banano.natriumwallet.util.SharedPreferencesUtil;
+
 import com.hwangjr.rxbus.annotation.Subscribe;
 
 import java.lang.reflect.Field;
@@ -63,6 +68,7 @@ import javax.inject.Inject;
 
 import io.realm.Realm;
 import io.realm.RealmQuery;
+import manta.MantaWallet;
 
 /**
  * Home Wallet Screen
@@ -338,18 +344,29 @@ public class HomeFragment extends BaseFragment {
             binding.loadingAnimation.setVisibility(View.GONE);
             binding.exampleCards.setVisibility(View.VISIBLE);
         } else if (mIntroUri != null) {
-            // Open send screen with URI data if it's here.
-            Address address = new Address(mIntroUri);
-            if (address.isValidAddress()) {
-                if (getActivity() instanceof WindowControl) {
-                    // show send dialog
-                    SendDialogFragment dialog = SendDialogFragment.newInstance(address.getAddress(), address.getAmount());
-                    dialog.show(((WindowControl) getActivity()).getFragmentUtility().getFragmentManager(),
-                            SendDialogFragment.TAG);
+            // Check if manta
+            if (!MantaWallet.Companion.parseURL(mIntroUri).isEmpty()) {
+                SendConfirmMantaDialogFragment dialog = SendConfirmMantaDialogFragment.newInstance(mIntroUri);
+                dialog.show(((WindowControl) getActivity()).getFragmentUtility().getFragmentManager(),
+                        SendCompleteDialogFragment.TAG);
 
-                    ((WindowControl) getActivity()).getFragmentUtility().getFragmentManager().executePendingTransactions();
+                ((WindowControl) getActivity()).getFragmentUtility().getFragmentManager().executePendingTransactions();
+            } else {
+
+                // Open send screen with URI data if it's here.
+                Address address = new Address(mIntroUri);
+                if (address.isValidAddress()) {
+                    if (getActivity() instanceof WindowControl) {
+                        // show send dialog
+                        SendDialogFragment dialog = SendDialogFragment.newInstance(address.getAddress(), address.getAmount());
+                        dialog.show(((WindowControl) getActivity()).getFragmentUtility().getFragmentManager(),
+                                SendDialogFragment.TAG);
+
+                        ((WindowControl) getActivity()).getFragmentUtility().getFragmentManager().executePendingTransactions();
+                    }
                 }
             }
+
             mIntroUri = null;
         }
     }

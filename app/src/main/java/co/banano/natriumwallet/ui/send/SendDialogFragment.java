@@ -12,7 +12,6 @@ import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 
 import androidx.annotation.Nullable;
-import androidx.lifecycle.ViewModelProviders;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
 import android.text.Editable;
@@ -101,8 +100,7 @@ public class SendDialogFragment extends BaseDialogFragment {
     private boolean maxSend = false;
     private String mAddressPrefill;
     private String mAmountPrefill;
-    private PaymentRequestMessage paymentRequest = null;
-    private SendViewModel model;
+
 
     /**
      * Create new instance of the dialog fragment (handy pattern if any data needs to be passed to it)
@@ -126,6 +124,14 @@ public class SendDialogFragment extends BaseDialogFragment {
         return fragment;
     }
 
+    public static SendDialogFragment newInstanceWithManta(String url) {
+        Bundle args = new Bundle();
+        args.putString("manta_url", url);
+        SendDialogFragment fragment = new SendDialogFragment();
+        fragment.setArguments(args);
+        return fragment;
+    }
+
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -142,10 +148,6 @@ public class SendDialogFragment extends BaseDialogFragment {
         if (mActivity instanceof ActivityWithComponent) {
             ((ActivityWithComponent) mActivity).getActivityComponent().inject(this);
         }
-
-        // get model
-
-        model = ViewModelProviders.of(getActivity()).get(SendViewModel.class);
 
         // get data
         Credentials credentials = realm.where(Credentials.class).findFirst();
@@ -528,32 +530,7 @@ public class SendDialogFragment extends BaseDialogFragment {
 
         // check if Manta address
 
-        if (!MantaWallet.Companion.parseURL(address).isEmpty()) {
-            Timber.i("Got manta address");
-
-            MantaWallet manta = MantaWallet.Companion.factory(address, new MemoryPersistence(), null);
-
-            assert manta != null;
-
-            model.setWallet(manta);
-
-            try {
-                PaymentRequestEnvelope envelope = manta
-                        .getPaymentRequestAsync("NANO").get();
-                paymentRequest = envelope.unpack();
-
-                Timber.i("%s", paymentRequest);
-
-                wallet.setSendNanoAmount(paymentRequest.getDestinations().get(0).getAmount().toString());
-
-                return true;
-
-            } catch (ExecutionException e) {
-                e.printStackTrace();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
+        if (!MantaWallet.Companion.parseURL(address).isEmpty()) return true;
 
         Address destination = new Address(address);
         if (!destination.isValidAddress()) {
@@ -563,6 +540,7 @@ public class SendDialogFragment extends BaseDialogFragment {
         hideAddressError();
         return true;
     }
+
 
     private void showAmountError(int str_id) {
         binding.sendAmountValidation.setVisibility(View.VISIBLE);
@@ -628,13 +606,8 @@ public class SendDialogFragment extends BaseDialogFragment {
     private void showSendConfirmMantaDialog() {
         String sendNanoAmount = "0";
         SendConfirmMantaDialogFragment dialog = SendConfirmMantaDialogFragment.newInstance(
-                paymentRequest.getMerchant().getName(),
-                paymentRequest.getMerchant().getAddress(),
-                paymentRequest.getAmount(),
-                paymentRequest.getFiatCurrency(),
-                paymentRequest.getDestinations().get(0).getDestinationAddress(),
-                paymentRequest.getDestinations().get(0).getAmount()
-                );
+                binding.sendAddress.getText().toString()
+        );
         dialog.setTargetFragment(this, SEND_RESULT);
         dialog.show(((WindowControl) mActivity).getFragmentUtility().getFragmentManager(),
                 SendConfirmDialogFragment.TAG);
@@ -658,6 +631,12 @@ public class SendDialogFragment extends BaseDialogFragment {
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == SEND_RESULT) {
             if (resultCode == SEND_COMPLETE) {
+                // TODO: This is workaround for getting destination. Investigate
+                Bundle res = data.getExtras();
+                if (res != null) {
+                    binding.sendAddress.setText(res.getString("destination"));
+                }
+
                 showSendCompleteDialog();
                 dismiss();
             } else if (resultCode == SEND_FAILED) {
@@ -668,6 +647,17 @@ public class SendDialogFragment extends BaseDialogFragment {
             if (resultCode == RESULT_OK) {
                 Bundle res = data.getExtras();
                 if (res != null) {
+
+                    // CheckManta
+
+                    String qrData = res.getString(ScanActivity.QR_CODE_RESULT);
+
+                    if (qrData != null && !MantaWallet.Companion.parseURL(qrData).isEmpty()) {
+                        if (validateAmount()) {
+                            showSendConfirmMantaDialog();
+                        }
+                    }
+
                     // parse address
                     Address address = new Address(res.getString(ScanActivity.QR_CODE_RESULT));
 
@@ -754,15 +744,14 @@ public class SendDialogFragment extends BaseDialogFragment {
         }
 
         public void onClickSend(View view) {
-            if (!validateRequest()) {
+            // check if manta request
+            if (!MantaWallet.Companion.parseURL(binding.sendAddress.getText().toString()).isEmpty())
+                showSendConfirmMantaDialog();
+            else if (!validateRequest()) {
                 return;
             } else if (mActivity instanceof WindowControl) {
                 // show send dialog
-                // check if manta request
-                if (paymentRequest != null)
-                    showSendConfirmMantaDialog();
-                else
-                    showSendConfirmDialog();
+                showSendConfirmDialog();
             }
         }
 

@@ -3,6 +3,7 @@ package co.banano.natriumwallet.ui.send;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
@@ -16,16 +17,22 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
+import android.widget.FrameLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.github.ajalt.reprint.core.AuthenticationFailureReason;
 import com.github.ajalt.reprint.core.Reprint;
+import com.google.android.material.snackbar.Snackbar;
 import com.hwangjr.rxbus.annotation.Subscribe;
+
+import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.HashMap;
 import java.util.Locale;
+import java.util.concurrent.ExecutionException;
 
 import javax.inject.Inject;
 
@@ -33,7 +40,6 @@ import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.databinding.DataBindingUtil;
 import androidx.fragment.app.Fragment;
-import androidx.lifecycle.ViewModelProviders;
 import co.banano.natriumwallet.R;
 import co.banano.natriumwallet.bus.CreatePin;
 import co.banano.natriumwallet.bus.PinComplete;
@@ -56,6 +62,9 @@ import co.banano.natriumwallet.util.NumberUtil;
 import co.banano.natriumwallet.util.SharedPreferencesUtil;
 import io.realm.Realm;
 import manta.MantaWallet;
+import manta.PaymentRequestEnvelope;
+import manta.PaymentRequestMessage;
+import timber.log.Timber;
 
 /**
  * Send confirm screen
@@ -77,27 +86,18 @@ public class SendConfirmMantaDialogFragment extends BaseDialogFragment {
     private Activity mActivity;
     private Fragment mTargetFragment;
     private int retryCount = 0;
-    private SendViewModel model;
+
+    private MantaWallet manta;
 
     /**
      * Create new instance of the dialog fragment (handy pattern if any data needs to be passed to it)
      *
      * @return SendConfirmDialogFragment instance
      */
-    public static SendConfirmMantaDialogFragment newInstance(String merchantName,
-                                                             String merchantAddress,
-                                                             BigDecimal fiatAmount,
-                                                             String fiatCurrency,
-                                                             String address,
-                                                             BigDecimal cryptoAmount) {
+    public static SendConfirmMantaDialogFragment newInstance(String url) {
         Bundle args = new Bundle();
 
-        args.putString("merchantName", merchantName);
-        args.putString("merchantAddress", merchantAddress);
-        args.putString("fiatAmount", fiatAmount.toString());
-        args.putString("fiatCurrency", fiatCurrency);
-        args.putString("address", address);
-        args.putString("cryptoAmount", cryptoAmount.toString());
+        args.putString("manta_url", url);
 
         SendConfirmMantaDialogFragment fragment = new SendConfirmMantaDialogFragment();
         fragment.setArguments(args);
@@ -121,25 +121,12 @@ public class SendConfirmMantaDialogFragment extends BaseDialogFragment {
             ((ActivityWithComponent) mActivity).getActivityComponent().inject(this);
         }
 
-        String destination = getArguments().getString("address");
-        String merchantName = getArguments().getString("merchantName");
-        String merchantAddress = getArguments().getString("merchantAddress");
-        String cryptoAmount = getArguments().getString("cryptoAmount");
-        String fiatAmount = getArguments().getString("fiatAmount");
-
-
-        // Get model for manta instance
-        model = ViewModelProviders.of(getActivity()).get(SendViewModel.class);
+        String manta_url = getArguments().getString("manta_url");
 
         // subscribe to bus
         RxBus.get().register(this);
 
-        // Set send amount
-        wallet.setSendNanoAmount(cryptoAmount);
 
-        // Set address
-
-        address = new Address(destination);
 
         // inflate the view
         binding = DataBindingUtil.inflate(
@@ -153,12 +140,42 @@ public class SendConfirmMantaDialogFragment extends BaseDialogFragment {
         window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, UIUtil.getDialogHeight(false, getContext()));
         window.setGravity(Gravity.BOTTOM);
 
-        if (binding != null) {
-            binding.merchantAddress.setText(merchantAddress);
-            binding.merchantName.setText(merchantName);
-            binding.fiatAmount.setText(fiatAmount);
-            binding.nanoAmount.setText(cryptoAmount);
-            binding.address.setText(destination);
+        manta = MantaWallet.Companion.factory(manta_url, new MemoryPersistence(), null);
+
+        assert manta != null;
+
+        try {
+            PaymentRequestEnvelope envelope = manta
+                    .getPaymentRequestAsync("NANO").get();
+            PaymentRequestMessage paymentRequest = envelope.unpack();
+
+            if (paymentRequest != null) {
+
+                Timber.i("%s", paymentRequest);
+
+                String nanoAmount = paymentRequest.getDestinations().get(0).getAmount().toString();
+
+                // Set send amount
+                wallet.setSendNanoAmount(nanoAmount);
+
+                // Set address
+
+                address = new Address(paymentRequest.getDestinations().get(0).getDestinationAddress());
+
+                if (binding != null) {
+                    binding.merchantAddress.setText(paymentRequest.getMerchant().getAddress());
+                    binding.merchantName.setText(paymentRequest.getMerchant().getName());
+                    binding.fiatAmount.setText(wallet.getSendNanoAmount());
+                    binding.nanoAmount.setText(nanoAmount);
+                    binding.address.setText(address.getAddress());
+                }
+
+            }
+
+        } catch (ExecutionException e) {
+            e.printStackTrace();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
         }
 
         // Lottie hardware acceleration
@@ -168,6 +185,12 @@ public class SendConfirmMantaDialogFragment extends BaseDialogFragment {
 
         return view;
     }
+
+    @Override
+    public void onViewCreated(View view, Bundle savedInstanceState) {
+        checkBalance();
+    }
+
 
     @Override
     public void onDestroyView() {
@@ -234,6 +257,28 @@ public class SendConfirmMantaDialogFragment extends BaseDialogFragment {
         accountService.requestSend(wallet.getFrontierBlock(), address, sendAmount);
     }
 
+    private boolean checkBalance() {
+        BigInteger sendAmount = NumberUtil.getAmountAsRawBigInteger(wallet.getSendNanoAmount());
+
+        if (new BigDecimal(wallet.getSendNanoAmount()).compareTo(new BigDecimal(wallet.getAccountBalanceBananoNoComma())) > 0) {
+            showAmountError(R.string.send_insufficient_balance);
+            return false;
+        }
+
+        if (wallet.getFrontierBlock() == null) {
+            showAmountError(R.string.send_no_frontier);
+            return false;
+        }
+
+        return true;
+    }
+
+    private void showAmountError (int str_id) {
+        Toast toast = Toast.makeText(getContext(), str_id, Toast.LENGTH_LONG);
+        toast.setGravity(Gravity.TOP| Gravity.CENTER_HORIZONTAL, 0, 0);
+        toast.show();
+    }
+
     /**
      * Catch errors from the service
      *
@@ -273,13 +318,16 @@ public class SendConfirmMantaDialogFragment extends BaseDialogFragment {
      */
     @Subscribe
     public void receiveProcessResponse(ProcessResponse processResponse) {
-        MantaWallet manta = model.getWallet().getValue();
         if (manta != null) {
             manta.sendPayment(processResponse.getHash(), "NANO");
         }
 
         hideLoadingOverlay();
         if (mTargetFragment != null) {
+            Bundle conData = new Bundle();
+            conData.putString("destination", this.binding.merchantName.getText().toString());
+            Intent intent = mActivity.getIntent();
+            intent.putExtras(conData);
             mTargetFragment.onActivityResult(getTargetRequestCode(), SEND_COMPLETE, mActivity.getIntent());
         }
         dismiss();
@@ -317,6 +365,8 @@ public class SendConfirmMantaDialogFragment extends BaseDialogFragment {
 
         @SuppressLint("StringFormatInvalid")
         public void onClickConfirm(View view) {
+            if (!checkBalance()) return;
+
             Credentials credentials = realm.where(Credentials.class).findFirst();
 
             if (Reprint.isHardwarePresent() && Reprint.hasFingerprintRegistered() && sharedPreferencesUtil.getAuthMethod() == AuthMethod.FINGERPRINT) {
