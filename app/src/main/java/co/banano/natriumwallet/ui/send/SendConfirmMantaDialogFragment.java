@@ -3,6 +3,7 @@ package co.banano.natriumwallet.ui.send;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -32,14 +33,20 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.HashMap;
 import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import javax.inject.Inject;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.databinding.DataBindingUtil;
 import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
+import androidx.fragment.app.FragmentTransaction;
 import co.banano.natriumwallet.R;
 import co.banano.natriumwallet.bus.CreatePin;
 import co.banano.natriumwallet.bus.PinComplete;
@@ -58,6 +65,7 @@ import co.banano.natriumwallet.network.model.response.ProcessResponse;
 import co.banano.natriumwallet.ui.common.ActivityWithComponent;
 import co.banano.natriumwallet.ui.common.BaseDialogFragment;
 import co.banano.natriumwallet.ui.common.UIUtil;
+import co.banano.natriumwallet.ui.common.WindowControl;
 import co.banano.natriumwallet.util.NumberUtil;
 import co.banano.natriumwallet.util.SharedPreferencesUtil;
 import io.realm.Realm;
@@ -88,6 +96,7 @@ public class SendConfirmMantaDialogFragment extends BaseDialogFragment {
     private int retryCount = 0;
 
     private MantaWallet manta;
+    private PaymentRequestEnvelope envelope;
 
     /**
      * Create new instance of the dialog fragment (handy pattern if any data needs to be passed to it)
@@ -121,11 +130,9 @@ public class SendConfirmMantaDialogFragment extends BaseDialogFragment {
             ((ActivityWithComponent) mActivity).getActivityComponent().inject(this);
         }
 
-        String manta_url = getArguments().getString("manta_url");
 
         // subscribe to bus
         RxBus.get().register(this);
-
 
 
         // inflate the view
@@ -140,44 +147,6 @@ public class SendConfirmMantaDialogFragment extends BaseDialogFragment {
         window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, UIUtil.getDialogHeight(false, getContext()));
         window.setGravity(Gravity.BOTTOM);
 
-        manta = MantaWallet.Companion.factory(manta_url, new MemoryPersistence(), null);
-
-        assert manta != null;
-
-        try {
-            PaymentRequestEnvelope envelope = manta
-                    .getPaymentRequestAsync("NANO").get();
-            PaymentRequestMessage paymentRequest = envelope.unpack();
-
-            if (paymentRequest != null) {
-
-                Timber.i("%s", paymentRequest);
-
-                String nanoAmount = paymentRequest.getDestinations().get(0).getAmount().toString();
-
-                // Set send amount
-                wallet.setSendNanoAmount(nanoAmount);
-
-                // Set address
-
-                address = new Address(paymentRequest.getDestinations().get(0).getDestinationAddress());
-
-                if (binding != null) {
-                    binding.merchantAddress.setText(paymentRequest.getMerchant().getAddress());
-                    binding.merchantName.setText(paymentRequest.getMerchant().getName());
-                    binding.fiatAmount.setText(wallet.getSendNanoAmount());
-                    binding.nanoAmount.setText(nanoAmount);
-                    binding.address.setText(address.getAddress());
-                }
-
-            }
-
-        } catch (ExecutionException e) {
-            e.printStackTrace();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-
         // Lottie hardware acceleration
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             binding.animationView.useHardwareAcceleration(true);
@@ -186,11 +155,29 @@ public class SendConfirmMantaDialogFragment extends BaseDialogFragment {
         return view;
     }
 
-    @Override
-    public void onViewCreated(View view, Bundle savedInstanceState) {
-        checkBalance();
-    }
 
+    @Override
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+
+        // Load Manta Request
+
+        String manta_url = getArguments().getString("manta_url");
+
+        manta = MantaWallet.Companion.factory(manta_url, new MemoryPersistence(), null);
+
+        assert manta != null;
+
+        showLoadingOverlay();
+
+        manta.getPaymentRequestAsync("NANO").thenApply((envelope) -> {
+                    this.envelope = envelope;
+                    getActivity().runOnUiThread(initFields);
+                    return envelope;
+                }
+        );
+
+    }
 
     @Override
     public void onDestroyView() {
@@ -200,6 +187,56 @@ public class SendConfirmMantaDialogFragment extends BaseDialogFragment {
             fingerprintDialog.dismiss();
         }
         RxBus.get().unregister(this);
+    }
+
+    private Runnable initFields = new Runnable() {
+
+        @Override
+        public void run() {
+            hideLoadingOverlay();
+            if (envelope == null) {
+                showMantaError();
+            } else {
+                PaymentRequestMessage paymentRequest = envelope.unpack();
+
+                if (paymentRequest != null) {
+
+                    hideMantaLoading();
+
+                    String nanoAmount = paymentRequest.getDestinations().get(0).getAmount().toString();
+
+                    // Set send amount
+                    wallet.setSendNanoAmount(nanoAmount);
+
+                    // Set address
+
+                    address = new Address(paymentRequest.getDestinations().get(0).getDestinationAddress());
+
+                    if (binding != null) {
+                        binding.destinationAddress.setText(paymentRequest.getDestinations().get(0).getDestinationAddress());
+                        binding.merchantAddress.setText(paymentRequest.getMerchant().getAddress());
+                        binding.merchantName.setText(paymentRequest.getMerchant().getName());
+                        binding.fiatAmount.setText(paymentRequest.getAmount().toString());
+                        binding.nanoAmount.setText(wallet.getSendNanoAmount());
+                        binding.sendCancel.setEnabled(true);
+                        binding.sendConfirm.setEnabled(true);
+                    }
+
+                }
+            }
+
+        }
+    };
+
+    private void showMantaError() {
+        binding.mantaLoading.setText("Manta Timeout Error");
+    }
+
+    private void hideMantaLoading() {
+
+        if (binding != null && binding.mantaErrorOverlay != null) {
+            animateView(binding.mantaErrorOverlay, View.GONE, 0, 200);
+        }
     }
 
     private void showLoadingOverlay() {
@@ -273,9 +310,9 @@ public class SendConfirmMantaDialogFragment extends BaseDialogFragment {
         return true;
     }
 
-    private void showAmountError (int str_id) {
+    private void showAmountError(int str_id) {
         Toast toast = Toast.makeText(getContext(), str_id, Toast.LENGTH_LONG);
-        toast.setGravity(Gravity.TOP| Gravity.CENTER_HORIZONTAL, 0, 0);
+        toast.setGravity(Gravity.TOP | Gravity.CENTER_HORIZONTAL, 0, 0);
         toast.show();
     }
 

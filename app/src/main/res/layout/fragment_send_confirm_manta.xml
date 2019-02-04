@@ -22,6 +22,31 @@
         android:layout_height="match_parent"
         android:background="@drawable/bg_modal">
 
+        <LinearLayout
+            android:id="@+id/manta_error_overlay"
+            android:orientation="vertical"
+            android:elevation="2dp"
+            android:layout_width="match_parent"
+            android:gravity="center_vertical"
+            android:layout_height="0dp"
+            android:background="@drawable/bg_modal"
+            app:layout_constraintTop_toBottomOf="@+id/send_confirm_close"
+            app:layout_constraintBottom_toBottomOf="parent"
+
+            android:visibility="visible">
+
+
+            <TextView
+                android:id="@+id/manta_loading"
+                style="@style/TextStyleHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Getting Manta Payment Request" />
+
+
+
+        </LinearLayout>
+
         <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/send_confirm_close"
             android:layout_width="40dp"
@@ -34,6 +59,8 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             app:srcCompat="@drawable/ic_close" />
+
+
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -74,7 +101,7 @@
                 android:text="10.20 NANO" />
 
             <TextView
-                android:id="@+id/address"
+                android:id="@+id/destination_address"
                 style="@style/TextStyleAddressAlt"
                 android:layout_width="@dimen/input_width"
                 android:layout_height="wrap_content"
@@ -87,7 +114,8 @@
                 android:paddingTop="10dp"
                 android:textAlignment="center"
                 android:textSize="@dimen/text_size_normal"
-                tools:text="ban_3gntuoguehi9d1mnhnar6ojx7jseeerwj5hesb4b4jga7oybbdbqyzap7ijg" />
+                />
+
         </LinearLayout>
 
         <Button
@@ -155,6 +183,8 @@
                 app:lottie_rawRes="@raw/send_anim" />
 
         </RelativeLayout>
+
+
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </layout>
