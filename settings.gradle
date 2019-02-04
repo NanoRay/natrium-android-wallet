@@ -1,1 +1,3 @@
 include ':app', ':libsodium-jni-release'
+include ':manta-kotlin'
+project (':manta-kotlin').projectDir = new File ('../manta-kotlin')

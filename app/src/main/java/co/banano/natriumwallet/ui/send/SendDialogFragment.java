@@ -3,13 +3,18 @@ package co.banano.natriumwallet.ui.send;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+
 import androidx.databinding.DataBindingUtil;
+
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
+
 import androidx.annotation.Nullable;
+import androidx.lifecycle.ViewModelProviders;
 import androidx.recyclerview.widget.LinearLayoutManager;
+
 import android.text.Editable;
 import android.text.InputFilter;
 import android.text.InputType;
@@ -44,7 +49,10 @@ import co.banano.natriumwallet.ui.contact.ContactSelectionAdapter;
 import co.banano.natriumwallet.ui.scan.ScanActivity;
 import co.banano.natriumwallet.util.NumberUtil;
 import co.banano.natriumwallet.util.SharedPreferencesUtil;
+
 import com.hwangjr.rxbus.annotation.Subscribe;
+
+import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -53,12 +61,17 @@ import java.text.DecimalFormatSymbols;
 import java.text.NumberFormat;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutionException;
 
 import javax.inject.Inject;
 
 import io.realm.Case;
 import io.realm.Realm;
 import io.realm.RealmQuery;
+import manta.MantaWallet;
+import manta.PaymentMessage;
+import manta.PaymentRequestEnvelope;
+import manta.PaymentRequestMessage;
 import timber.log.Timber;
 
 import static android.app.Activity.RESULT_OK;
@@ -77,6 +90,7 @@ public class SendDialogFragment extends BaseDialogFragment {
     SharedPreferencesUtil sharedPreferencesUtil;
     @Inject
     Realm realm;
+
     private FragmentSendBinding binding;
     private Address address;
     private Activity mActivity;
@@ -87,6 +101,8 @@ public class SendDialogFragment extends BaseDialogFragment {
     private boolean maxSend = false;
     private String mAddressPrefill;
     private String mAmountPrefill;
+    private PaymentRequestMessage paymentRequest = null;
+    private SendViewModel model;
 
     /**
      * Create new instance of the dialog fragment (handy pattern if any data needs to be passed to it)
@@ -126,6 +142,10 @@ public class SendDialogFragment extends BaseDialogFragment {
         if (mActivity instanceof ActivityWithComponent) {
             ((ActivityWithComponent) mActivity).getActivityComponent().inject(this);
         }
+
+        // get model
+
+        model = ViewModelProviders.of(getActivity()).get(SendViewModel.class);
 
         // get data
         Credentials credentials = realm.where(Credentials.class).findFirst();
@@ -498,11 +518,43 @@ public class SendDialogFragment extends BaseDialogFragment {
                 return false;
             }
         }
+
+
         // check for valid address
         if (address.isEmpty()) {
             showAddressError(R.string.send_enter_address);
             return false;
         }
+
+        // check if Manta address
+
+        if (!MantaWallet.Companion.parseURL(address).isEmpty()) {
+            Timber.i("Got manta address");
+
+            MantaWallet manta = MantaWallet.Companion.factory(address, new MemoryPersistence(), null);
+
+            assert manta != null;
+
+            model.setWallet(manta);
+
+            try {
+                PaymentRequestEnvelope envelope = manta
+                        .getPaymentRequestAsync("NANO").get();
+                paymentRequest = envelope.unpack();
+
+                Timber.i("%s", paymentRequest);
+
+                wallet.setSendNanoAmount(paymentRequest.getDestinations().get(0).getAmount().toString());
+
+                return true;
+
+            } catch (ExecutionException e) {
+                e.printStackTrace();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+
         Address destination = new Address(address);
         if (!destination.isValidAddress()) {
             showAddressError(R.string.send_invalid_address);
@@ -522,7 +574,9 @@ public class SendDialogFragment extends BaseDialogFragment {
     }
 
     private boolean validateAmount() {
+
         BigInteger sendAmount = NumberUtil.getAmountAsRawBigInteger(wallet.getSendNanoAmount());
+
         // check that amount being sent is less than or equal to account balance
         if (wallet.getSendNanoAmount().isEmpty()) {
             showAmountError(R.string.send_enter_amount);
@@ -545,8 +599,9 @@ public class SendDialogFragment extends BaseDialogFragment {
     }
 
     private boolean validateRequest() {
-        boolean amountValid = validateAmount();
         boolean addressValid = validateAddress();
+        boolean amountValid = validateAmount();
+
         if (!amountValid || !addressValid) {
             return false;
         } else {
@@ -567,6 +622,22 @@ public class SendDialogFragment extends BaseDialogFragment {
         SendCompleteDialogFragment dialog = SendCompleteDialogFragment.newInstance(binding.sendAddress.getText().toString(), sendAmount, useLocalCurrency);
         dialog.show(((WindowControl) mActivity).getFragmentUtility().getFragmentManager(),
                 SendCompleteDialogFragment.TAG);
+        executePendingTransactions();
+    }
+
+    private void showSendConfirmMantaDialog() {
+        String sendNanoAmount = "0";
+        SendConfirmMantaDialogFragment dialog = SendConfirmMantaDialogFragment.newInstance(
+                paymentRequest.getMerchant().getName(),
+                paymentRequest.getMerchant().getAddress(),
+                paymentRequest.getAmount(),
+                paymentRequest.getFiatCurrency(),
+                paymentRequest.getDestinations().get(0).getDestinationAddress(),
+                paymentRequest.getDestinations().get(0).getAmount()
+                );
+        dialog.setTargetFragment(this, SEND_RESULT);
+        dialog.show(((WindowControl) mActivity).getFragmentUtility().getFragmentManager(),
+                SendConfirmDialogFragment.TAG);
         executePendingTransactions();
     }
 
@@ -647,7 +718,7 @@ public class SendDialogFragment extends BaseDialogFragment {
             NumberFormat nf = NumberFormat.getCurrencyInstance(wallet.getLocalCurrency().getLocale());
             String allowedChars = "0123456789.";
             if (nf instanceof DecimalFormat) {
-                DecimalFormatSymbols sym = ((DecimalFormat)nf).getDecimalFormatSymbols();
+                DecimalFormatSymbols sym = ((DecimalFormat) nf).getDecimalFormatSymbols();
                 allowedChars = String.format("0123456789%s", sym.getDecimalSeparator());
             }
             binding.sendAmount.setKeyListener(DigitsKeyListener.getInstance(allowedChars));
@@ -687,7 +758,11 @@ public class SendDialogFragment extends BaseDialogFragment {
                 return;
             } else if (mActivity instanceof WindowControl) {
                 // show send dialog
-                showSendConfirmDialog();
+                // check if manta request
+                if (paymentRequest != null)
+                    showSendConfirmMantaDialog();
+                else
+                    showSendConfirmDialog();
             }
         }
 
@@ -718,7 +793,7 @@ public class SendDialogFragment extends BaseDialogFragment {
             binding.sendAddress.setText("@");
             binding.sendAddress.requestFocus();
             binding.sendAddress.setSelection(1);
-            InputMethodManager imm = (InputMethodManager)getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+            InputMethodManager imm = (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
             imm.showSoftInput(binding.sendAddress, InputMethodManager.SHOW_IMPLICIT);
         }
     }

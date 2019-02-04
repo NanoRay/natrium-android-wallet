@@ -19,6 +19,7 @@ import co.banano.natriumwallet.ui.pin.PinDialogFragment;
 import co.banano.natriumwallet.ui.receive.ReceiveDialogFragment;
 import co.banano.natriumwallet.ui.send.SendCompleteDialogFragment;
 import co.banano.natriumwallet.ui.send.SendConfirmDialogFragment;
+import co.banano.natriumwallet.ui.send.SendConfirmMantaDialogFragment;
 import co.banano.natriumwallet.ui.send.SendDialogFragment;
 import co.banano.natriumwallet.ui.settings.BackupSeedDialogFragment;
 import co.banano.natriumwallet.ui.settings.ChangeRepDialogFragment;
@@ -79,6 +80,8 @@ public interface ActivityComponent {
     void inject(SendDialogFragment sendDialogFragment);
 
     void inject(SendConfirmDialogFragment sendConfirmDialogFragment);
+
+    void inject(SendConfirmMantaDialogFragment sendConfirmMantaDialogFragment);
 
     void inject(SendCompleteDialogFragment sendCompleteDialogFragment);
 
