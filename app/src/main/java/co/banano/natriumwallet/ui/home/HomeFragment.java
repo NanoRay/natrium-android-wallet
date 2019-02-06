@@ -53,6 +53,7 @@ import co.banano.natriumwallet.ui.receive.ReceiveDialogFragment;
 import co.banano.natriumwallet.ui.send.SendCompleteDialogFragment;
 import co.banano.natriumwallet.ui.send.SendConfirmMantaDialogFragment;
 import co.banano.natriumwallet.ui.send.SendDialogFragment;
+import co.banano.natriumwallet.ui.send.SendDialogFragment_MembersInjector;
 import co.banano.natriumwallet.ui.settings.SettingsFragment;
 import co.banano.natriumwallet.util.SharedPreferencesUtil;
 
@@ -346,9 +347,11 @@ public class HomeFragment extends BaseFragment {
         } else if (mIntroUri != null) {
             // Check if manta
             if (!MantaWallet.Companion.parseURL(mIntroUri).isEmpty()) {
-                SendConfirmMantaDialogFragment dialog = SendConfirmMantaDialogFragment.newInstance(mIntroUri);
+                if (!(getActivity() instanceof WindowControl)) return;
+
+                SendDialogFragment dialog = SendDialogFragment.newInstanceWithManta(mIntroUri);
                 dialog.show(((WindowControl) getActivity()).getFragmentUtility().getFragmentManager(),
-                        SendCompleteDialogFragment.TAG);
+                        SendDialogFragment.TAG);
 
                 ((WindowControl) getActivity()).getFragmentUtility().getFragmentManager().executePendingTransactions();
             } else {

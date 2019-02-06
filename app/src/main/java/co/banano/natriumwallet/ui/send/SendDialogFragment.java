@@ -100,6 +100,7 @@ public class SendDialogFragment extends BaseDialogFragment {
     private boolean maxSend = false;
     private String mAddressPrefill;
     private String mAmountPrefill;
+    private String urlPrefill;
 
 
     /**
@@ -429,6 +430,8 @@ public class SendDialogFragment extends BaseDialogFragment {
         }
 
         // Prefill data if applicable
+        urlPrefill = getArguments().getString("manta_url", null);
+
         mAddressPrefill = getArguments().getString("address", null);
         mAmountPrefill = getArguments().getString("amount", null);
         if (mAddressPrefill != null) {
@@ -443,6 +446,16 @@ public class SendDialogFragment extends BaseDialogFragment {
 
     @Override
     public void onViewCreated(View view, Bundle savedInstanceState) {
+        if (urlPrefill != null) {
+            if (!(mActivity instanceof WindowControl)) return;
+
+            SendConfirmMantaDialogFragment dialog =
+                    SendConfirmMantaDialogFragment.newInstance(urlPrefill);
+            dialog.setTargetFragment(this, SEND_RESULT);
+            dialog.show(((WindowControl) mActivity).getFragmentUtility().getFragmentManager(),
+                    SendConfirmDialogFragment.TAG);
+        }
+
         if (mAmountPrefill != null && mAddressPrefill != null) {
             if (validateRequest() && mActivity instanceof WindowControl) {
                 // show confirm dialog
@@ -652,6 +665,7 @@ public class SendDialogFragment extends BaseDialogFragment {
 
                     if (qrData != null && !MantaWallet.Companion.parseURL(qrData).isEmpty()) {
                         showSendConfirmMantaDialog(qrData);
+                        return;
                     }
 
                     // parse address
