@@ -24,16 +24,16 @@
 
         <LinearLayout
             android:id="@+id/manta_error_overlay"
-            android:orientation="vertical"
-            android:elevation="2dp"
             android:layout_width="match_parent"
-            android:gravity="center_vertical"
             android:layout_height="0dp"
             android:background="@drawable/bg_modal"
-            app:layout_constraintTop_toBottomOf="@+id/send_confirm_close"
+            android:elevation="2dp"
+            android:gravity="center_vertical"
+            android:orientation="vertical"
+            android:visibility="visible"
             app:layout_constraintBottom_toBottomOf="parent"
 
-            android:visibility="visible">
+            app:layout_constraintTop_toBottomOf="@+id/send_confirm_close">
 
 
             <TextView
@@ -42,7 +42,6 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Getting Manta Payment Request" />
-
 
 
         </LinearLayout>
@@ -61,13 +60,19 @@
             app:srcCompat="@drawable/ic_close" />
 
 
-
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             app:layout_constraintBottom_toTopOf="@+id/send_confirm"
             app:layout_constraintTop_toTopOf="parent">
+
+            <ImageView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="30dp"
+                android:layout_marginHorizontal="20dp"
+                android:src="@drawable/appia_monochrome"/>
 
             <TextView
                 android:id="@+id/merchant_name"
@@ -81,7 +86,7 @@
                 style="@style/TextStyle4"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Merchant Address"/>
+                android:text="Merchant Address" />
 
 
             <TextView
@@ -108,13 +113,12 @@
                 android:layout_gravity="center"
                 android:layout_marginTop="10dp"
                 android:background="@drawable/bg_edittext"
-                android:paddingBottom="10dp"
                 android:paddingLeft="35dp"
-                android:paddingRight="35dp"
                 android:paddingTop="10dp"
+                android:paddingRight="35dp"
+                android:paddingBottom="10dp"
                 android:textAlignment="center"
-                android:textSize="@dimen/text_size_normal"
-                />
+                android:textSize="@dimen/text_size_normal" />
 
         </LinearLayout>
 
@@ -123,9 +127,9 @@
             style="@style/PrimaryButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="20dp"
-            android:layout_marginEnd="45dp"
             android:layout_marginStart="45dp"
+            android:layout_marginEnd="45dp"
+            android:layout_marginBottom="20dp"
             android:gravity="center_horizontal"
             android:onClick="@{handlers::onClickConfirm}"
             android:text="@string/dialog_confirm"
@@ -140,9 +144,9 @@
             style="@style/OutlineButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="20dp"
-            android:layout_marginEnd="45dp"
             android:layout_marginStart="45dp"
+            android:layout_marginEnd="45dp"
+            android:layout_marginBottom="20dp"
             android:gravity="center_horizontal"
             android:onClick="@{handlers::onClickClose}"
             android:text="@string/dialog_cancel"
@@ -183,7 +187,6 @@
                 app:lottie_rawRes="@raw/send_anim" />
 
         </RelativeLayout>
-
 
 
     </androidx.constraintlayout.widget.ConstraintLayout>

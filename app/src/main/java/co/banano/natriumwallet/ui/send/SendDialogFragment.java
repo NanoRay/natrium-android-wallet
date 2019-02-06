@@ -603,11 +603,9 @@ public class SendDialogFragment extends BaseDialogFragment {
         executePendingTransactions();
     }
 
-    private void showSendConfirmMantaDialog() {
+    private void showSendConfirmMantaDialog(String url) {
         String sendNanoAmount = "0";
-        SendConfirmMantaDialogFragment dialog = SendConfirmMantaDialogFragment.newInstance(
-                binding.sendAddress.getText().toString()
-        );
+        SendConfirmMantaDialogFragment dialog = SendConfirmMantaDialogFragment.newInstance(url);
         dialog.setTargetFragment(this, SEND_RESULT);
         dialog.show(((WindowControl) mActivity).getFragmentUtility().getFragmentManager(),
                 SendConfirmDialogFragment.TAG);
@@ -653,9 +651,7 @@ public class SendDialogFragment extends BaseDialogFragment {
                     String qrData = res.getString(ScanActivity.QR_CODE_RESULT);
 
                     if (qrData != null && !MantaWallet.Companion.parseURL(qrData).isEmpty()) {
-                        if (validateAmount()) {
-                            showSendConfirmMantaDialog();
-                        }
+                        showSendConfirmMantaDialog(qrData);
                     }
 
                     // parse address
@@ -745,8 +741,11 @@ public class SendDialogFragment extends BaseDialogFragment {
 
         public void onClickSend(View view) {
             // check if manta request
-            if (!MantaWallet.Companion.parseURL(binding.sendAddress.getText().toString()).isEmpty())
-                showSendConfirmMantaDialog();
+
+            String url = binding.sendAddress.getText().toString();
+
+            if (!MantaWallet.Companion.parseURL(url).isEmpty())
+                showSendConfirmMantaDialog(url);
             else if (!validateRequest()) {
                 return;
             } else if (mActivity instanceof WindowControl) {

@@ -172,7 +172,7 @@ public class SendConfirmMantaDialogFragment extends BaseDialogFragment {
 
         manta.getPaymentRequestAsync("NANO").thenApply((envelope) -> {
                     this.envelope = envelope;
-                    getActivity().runOnUiThread(initFields);
+                    view.post(initFields);
                     return envelope;
                 }
         );
